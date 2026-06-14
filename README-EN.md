@@ -86,9 +86,9 @@ The skill (`skills/fable-ish/SKILL.md`) is the human-readable workflow layer: mo
 
 ## 🛡️ Design note — why there's no command-blocking hook
 
-The original shipped `PreToolUse` / `PermissionRequest` hooks that tried to block risky shell commands and secret-file edits with regular expressions. That was **removed on purpose**.
+fable-ish does **not** block risky shell commands or secret-file edits — by design.
 
-Matching shell *intent* with regex is a losing game. A quick test of the original ruleset blocked only **4 of 16** dangerous commands — `rm -r -f` (split flags), `rm --recursive --force`, `$VAR -rf`, base64-piped `eval`, `git -C . push`, and genuinely destructive `dd` / `mkfs` / fork-bombs all slipped through — while it *over-blocked* legitimate work like clearing a build cache or `npm publish` during a release. Variable expansion, quoting, globs, and encoding defeat any surface pattern, so hardening the regex only trades false negatives for more false positives.
+Matching shell *intent* with regex is a losing game. A regex ruleset for this blocks only **4 of 16** dangerous commands — `rm -r -f` (split flags), `rm --recursive --force`, `$VAR -rf`, base64-piped `eval`, `git -C . push`, and genuinely destructive `dd` / `mkfs` / fork-bombs all slip through — while it *over-blocks* legitimate work like clearing a build cache or `npm publish` during a release. Variable expansion, quoting, globs, and encoding defeat any surface pattern, so hardening the regex only trades false negatives for more false positives.
 
 Claude Code already has a stronger native mechanism. Enforce hard limits with `permissions.deny` in your settings, where commands are parsed and a user approval step still applies:
 
@@ -143,7 +143,7 @@ Sample hook inputs can be piped into each hook script with `CLAUDE_PLUGIN_DATA` 
 - **Original author (Codex plugin):** [플라잉따릉이 (Agent Korea)](https://github.com/) — verification-gate design and original implementation
 - **Claude Code port:** chrisryugj
 
-The original was built as a Codex plugin; this repository adapts it to Claude Code (hooks, manifest, tooling) without renaming the plugin or its workflow. The port also folds in upstream 0.1.1/0.1.2 improvements (`stop_hook_active` handling, expanded Korean classification, coverage tracking, and the new-prompt reset fix).
+The original was built as a Codex plugin; this repository adapts it to Claude Code (hooks, manifest, tooling) without renaming the plugin or its workflow.
 
 ---
 
