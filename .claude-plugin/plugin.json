@@ -1,0 +1,26 @@
+{
+  "name": "fable-ish",
+  "version": "0.1.2",
+  "description": "Verification-gated workflow plugin for Claude Code tasks. Adds lightweight hooks for task classification, verification tracking, and stop-time completion review.",
+  "author": {
+    "name": "플라잉따릉이 (Agent Korea)"
+  },
+  "contributors": [
+    {
+      "name": "chrisryugj",
+      "role": "Claude Code port"
+    }
+  ],
+  "homepage": "https://github.com/chrisryugj/fable-ish",
+  "repository": "https://github.com/chrisryugj/fable-ish",
+  "license": "MIT",
+  "keywords": [
+    "verification",
+    "workflow",
+    "hooks",
+    "verification-gate",
+    "claude-code"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
+}

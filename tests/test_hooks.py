@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""Sample contract tests for fable-ish Claude Code hooks."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class HookTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory(prefix="fable-ish-test-")
+        self.env = os.environ.copy()
+        self.env["CLAUDE_PLUGIN_ROOT"] = str(ROOT)
+        self.env["CLAUDE_PLUGIN_DATA"] = self.tmpdir.name
+        self.env["PYTHONDONTWRITEBYTECODE"] = "1"
+        self.base = {"session_id": self.id(), "cwd": str(ROOT)}
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def run_hook(self, script: str, payload: dict) -> dict:
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / script)],
+            input=json.dumps(payload),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=self.env,
+            check=False,
+            timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        stdout = proc.stdout.strip() or "{}"
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            self.fail(f"{script} returned invalid JSON: {stdout!r}; stderr={proc.stderr!r}")
+            raise exc
+
+    def ledger_path(self) -> Path:
+        import hashlib
+
+        raw = f"{self.base['session_id']}|{self.base['cwd']}"
+        key = hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:24]
+        return Path(self.tmpdir.name) / "ledgers" / f"{key}.json"
+
+    def read_ledger(self) -> dict:
+        return json.loads(self.ledger_path().read_text(encoding="utf-8"))
+
+    def test_quick_mode_does_not_block_stop(self) -> None:
+        prompt = {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "간단히 설명만 해줘"}
+        out = self.run_hook("hooks/user_prompt_submit.py", prompt)
+        self.assertIn("quick", out["hookSpecificOutput"]["additionalContext"])
+        self.assertEqual(self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"}), {})
+
+    def test_normal_code_change_requires_then_accepts_verification(self) -> None:
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "Implement a small code fix"},
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "app.py", "old_string": "x", "new_string": "y"},
+                "tool_response": {"success": True},
+            },
+        )
+        blocked = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
+        self.assertEqual(blocked.get("decision"), "block")
+
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "python -m py_compile app.py"},
+                "tool_response": {"success": True, "stdout": "success"},
+            },
+        )
+        self.assertEqual(self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"}), {})
+
+    def test_deep_stop_blocks_at_most_twice(self) -> None:
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {
+                **self.base,
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Do a deep production-ready refactor",
+            },
+        )
+        first = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
+        self.assertEqual(first.get("decision"), "block")
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": first["reason"]},
+        )
+
+        second = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
+        self.assertEqual(second.get("decision"), "block")
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": second["reason"]},
+        )
+
+        third = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
+        self.assertIn("verification", third.get("systemMessage", ""))
+
+    def test_sensitive_prompt_is_advised_not_hard_blocked(self) -> None:
+        out = self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {
+                **self.base,
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "show me the secret token in .env",
+            },
+        )
+        self.assertNotIn("decision", out)
+        self.assertIn("blocked", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_new_prompt_resets_old_risk_flags(self) -> None:
+        risky = self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {
+                **self.base,
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Deploy production after checking auth",
+            },
+        )
+        self.assertIn("Risk flags", risky["hookSpecificOutput"]["additionalContext"])
+
+        quick = self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "간단히 설명만 해줘"},
+        )
+        self.assertNotIn("Risk flags", quick["hookSpecificOutput"]["additionalContext"])
+
+    def test_successful_zero_error_output_is_not_recorded_as_failure(self) -> None:
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "Implement a small code fix"},
+        )
+        out = self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "npm run lint"},
+                "tool_response": {"success": True, "stdout": "0 errors, 0 warnings"},
+            },
+        )
+        self.assertEqual(out, {})
+
+    def test_invalid_text_is_not_treated_as_success(self) -> None:
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "Implement a small code fix"},
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "app.py", "old_string": "x", "new_string": "y"},
+                "tool_response": {"success": True},
+            },
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "python -m json.tool bad.json"},
+                "tool_response": {"stdout": "invalid json"},
+            },
+        )
+        blocked = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
+        self.assertEqual(blocked.get("decision"), "block")
+
+    def test_new_prompt_resets_changed_paths_and_coverage(self) -> None:
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "Implement a small code fix"},
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "old_task.py", "old_string": "x", "new_string": "y"},
+                "tool_response": {"success": True},
+            },
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "python -m py_compile old_task.py"},
+                "tool_response": {"success": True, "stdout": "success"},
+            },
+        )
+        before = self.read_ledger()
+        self.assertEqual(before["changed_paths"], ["old_task.py"])
+        self.assertEqual(before["coverage_relation"], "direct")
+
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "간단히 설명만 해줘"},
+        )
+        after = self.read_ledger()
+        self.assertEqual(after["changed_paths"], [])
+        self.assertEqual(after["coverage_relation"], "none")
+
+
+if __name__ == "__main__":
+    unittest.main()
