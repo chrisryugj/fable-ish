@@ -267,6 +267,67 @@ class HookTestCase(unittest.TestCase):
         )
         self.assertEqual(out, {})
 
+    def test_failure_event_does_not_count_as_passing_verification(self) -> None:
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "Implement a small code fix"},
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "app.py", "old_string": "x", "new_string": "y"},
+                "tool_response": {"success": True},
+            },
+        )
+        # A verification command arrives via the failure event — it must not be logged as a pass.
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUseFailure",
+                "tool_name": "Bash",
+                "tool_input": {"command": "npm test"},
+                "tool_response": {"stdout": "1 failing"},
+            },
+        )
+        led = self.read_ledger()
+        self.assertTrue(led["failures"])
+        self.assertFalse(any(v.get("success") is True for v in led["verification_results"]))
+        blocked = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
+        self.assertEqual(blocked.get("decision"), "block")
+
+    def test_powershell_verification_is_tracked(self) -> None:
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "Implement a small code fix"},
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "app.py", "old_string": "x", "new_string": "y"},
+                "tool_response": {"success": True},
+            },
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "PowerShell",
+                "tool_input": {"command": "python -m pytest app.py"},
+                "tool_response": {"success": True, "stdout": "passed"},
+            },
+        )
+        led = self.read_ledger()
+        self.assertTrue(any(v.get("success") is True for v in led["verification_results"]))
+        self.assertEqual(self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"}), {})
+
 
 if __name__ == "__main__":
     unittest.main()

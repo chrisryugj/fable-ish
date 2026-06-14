@@ -114,7 +114,7 @@ def changed_kinds(input_data: dict[str, Any]) -> list[str]:
         return sorted({classify_path_kind(path.strip()) for path in paths})
     tool_name = str(input_data.get("tool_name") or "")
     command = command_from_input(input_data)
-    if tool_name == "Bash" and MUTATING_BASH_RE.search(command):
+    if tool_name in {"Bash", "PowerShell"} and MUTATING_BASH_RE.search(command):
         return ["other"]
     return []
 

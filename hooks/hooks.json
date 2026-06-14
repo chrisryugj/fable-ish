@@ -14,13 +14,26 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^(Bash|Edit|Write|MultiEdit|NotebookEdit)$",
+        "matcher": "^(Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit)$",
         "hooks": [
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_tool_use.py\"",
             "timeout": 10,
             "statusMessage": "Recording fable-ish evidence"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "^(Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_tool_use.py\"",
+            "timeout": 10,
+            "statusMessage": "Recording fable-ish failure evidence"
           }
         ]
       }

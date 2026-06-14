@@ -79,7 +79,7 @@ If hooks are disabled or untrusted, the skill still works as reusable instructio
 | Hook | Role |
 |------|------|
 | `UserPromptSubmit` | Classifies the request as `quick`/`normal`/`deep`/`blocked` and injects short context for the expected verification depth |
-| `PostToolUse` | Records changed files/paths, verification commands, a coverage relation (`direct`/`generic`/`uncertain`), and failures in a JSON ledger (under `CLAUDE_PLUGIN_DATA`, OS-temp fallback) |
+| `PostToolUse` (+ `PostToolUseFailure`) | On **both success and failure** of Bash/PowerShell/edit tools, records changed files/paths, verification commands, a coverage relation (`direct`/`generic`/`uncertain`), and failures in a JSON ledger (under `CLAUDE_PLUGIN_DATA`, OS-temp fallback). A verification that arrives via the failure event is never logged as a pass |
 | `Stop` | Re-engages when work changed files without successful verification, or when the turn only *promised* work without doing it (capped at two blocks; yields immediately when `stop_hook_active` is set) |
 
 The skill (`skills/fable-ish/SKILL.md`) is the human-readable workflow layer: mode-by-mode work loops, the verification ladder, and the final-report format.

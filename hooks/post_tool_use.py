@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from ledger import add_unique, emit_json, read_stdin_json, update_ledger
+from ledger import add_unique, emit_json, read_stdin_json, redact, update_ledger
 from parse_tool_result import (
     changed_kinds,
     changed_paths,
@@ -22,11 +22,26 @@ from parse_tool_result import (
 
 def main() -> int:
     input_data = read_stdin_json()
+    event = str(input_data.get("hook_event_name") or "PostToolUse")
+    failure_event = event == "PostToolUseFailure"
     kinds = changed_kinds(input_data)
     paths = changed_paths(input_data)
     failure = detect_failure(input_data)
     verification = verification_record(input_data)
     command = command_from_input(input_data)
+
+    # An explicit failure event means the tool did not succeed: never let it be
+    # recorded as a passing verification, and record a failure even if the
+    # heuristic could not parse one from the (schema-uncertain) failure payload.
+    if failure_event:
+        if verification and verification.get("success") is not False:
+            verification["success"] = False
+        if not failure:
+            failure = {
+                "kind": "tool-failure",
+                "summary": redact(command, 240) or "tool reported a failure",
+                "baseline": "uncertain",
+            }
 
     def apply(ledger):
         if kinds:
@@ -52,7 +67,7 @@ def main() -> int:
         emit_json(
             {
                 "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
+                    "hookEventName": event,
                     "additionalContext": "fable-ish observed a tool failure. Do not report completion until it is fixed, isolated as baseline, or explicitly documented.",
                 }
             }
