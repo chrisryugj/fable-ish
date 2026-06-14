@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from ledger import emit_json, load_ledger, read_stdin_json, save_ledger
-from verify_state import should_block_stop, warning_after_max_blocks
+from verify_state import should_block_stop, stated_but_unstarted, warning_after_max_blocks
 
 
 def main() -> int:
@@ -23,6 +23,17 @@ def main() -> int:
                     "hookEventName": "Stop",
                     "additionalContext": "fable-ish: stop hook was already active, so no additional block was issued.",
                 },
+            }
+        )
+        return 0
+
+    if stated_but_unstarted(str(input_data.get("transcript_path") or "")):
+        emit_json(
+            {
+                "decision": "block",
+                "reason": "fable-ish: the previous response only stated an intent to do work without doing it. "
+                "Carry it out now with tool calls; end the turn only when the task is complete or you need input "
+                "that only the user can provide.",
             }
         )
         return 0

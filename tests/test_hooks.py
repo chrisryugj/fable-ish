@@ -56,6 +56,20 @@ class HookTestCase(unittest.TestCase):
     def read_ledger(self) -> dict:
         return json.loads(self.ledger_path().read_text(encoding="utf-8"))
 
+    def write_transcript(self, messages: list) -> str:
+        path = Path(self.tmpdir.name) / "transcript.jsonl"
+        with open(path, "w", encoding="utf-8") as handle:
+            for m in messages:
+                handle.write(json.dumps(m, ensure_ascii=False) + "\n")
+        return str(path)
+
+    @staticmethod
+    def _assistant(text: str, tool: bool = False) -> dict:
+        content = [{"type": "text", "text": text}]
+        if tool:
+            content.append({"type": "tool_use", "name": "Edit", "input": {}})
+        return {"type": "assistant", "message": {"role": "assistant", "content": content}}
+
     def test_quick_mode_does_not_block_stop(self) -> None:
         prompt = {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "간단히 설명만 해줘"}
         out = self.run_hook("hooks/user_prompt_submit.py", prompt)
@@ -228,6 +242,30 @@ class HookTestCase(unittest.TestCase):
         after = self.read_ledger()
         self.assertEqual(after["changed_paths"], [])
         self.assertEqual(after["coverage_relation"], "none")
+
+    def test_stated_but_unstarted_work_is_re_engaged(self) -> None:
+        tp = self.write_transcript([self._assistant("좋습니다. 이제 로그인 검증 로직을 구현하겠습니다.")])
+        out = self.run_hook(
+            "hooks/stop_gate.py",
+            {**self.base, "hook_event_name": "Stop", "transcript_path": tp},
+        )
+        self.assertEqual(out.get("decision"), "block")
+
+    def test_intent_followed_by_tool_call_passes(self) -> None:
+        tp = self.write_transcript([self._assistant("Now I'll implement the auth check.", tool=True)])
+        out = self.run_hook(
+            "hooks/stop_gate.py",
+            {**self.base, "hook_event_name": "Stop", "transcript_path": tp},
+        )
+        self.assertEqual(out, {})
+
+    def test_question_to_user_passes(self) -> None:
+        tp = self.write_transcript([self._assistant("로그인부터 구현할까요, 아니면 회원가입부터 할까요?")])
+        out = self.run_hook(
+            "hooks/stop_gate.py",
+            {**self.base, "hook_event_name": "Stop", "transcript_path": tp},
+        )
+        self.assertEqual(out, {})
 
 
 if __name__ == "__main__":
