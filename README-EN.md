@@ -118,12 +118,31 @@ For real isolation, rely on sandboxing, permission modes (avoid `bypassPermissio
 
 ## ⚠️ Limits
 
-The verification gate is a discipline aid, not a security boundary.
+The hooks are guardrails and a discipline aid, not a complete security boundary.
 
-- The classifier is heuristic; treat the mode as a hint, not a guarantee.
+- Multiple matching hooks can run concurrently.
+- `PreToolUse` blocking does not intercept every possible shell path — it's a heuristic that variables, quoting, and encoding can bypass.
 - `PostToolUse` cannot undo side effects from a completed command.
+- Task classification is heuristic; treat the mode as a hint, not a guarantee.
 - Hooks require review and trust before running.
-- Stop blocking is intentionally capped at two to avoid infinite loops.
+- Stop blocking is intentionally capped (two blocks) to avoid infinite loops.
+- The `permissions.deny` profile is provided as an example only; this plugin does not silently install it.
+
+For stronger enforcement, add sandboxing, approvals, tests, linters, and review policies.
+
+---
+
+## 🚫 Excluded by design
+
+- No MCP server.
+- No app integration.
+- No external API.
+- No web server or UI.
+- No database.
+- No background worker.
+- No LLM classifier (classification is regex heuristics).
+- No GitHub, Slack, Gmail, or Notion integration.
+- No complex policy engine.
 
 ---
 
