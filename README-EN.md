@@ -19,7 +19,9 @@
 
 > Set the goal → gather evidence → define the work unit → **set exit criteria** → implement → **verify** → hunt for counter-examples → re-tune the criteria → exit if they pass, else repeat.
 
-The point isn't a *fixed checklist* ("tests pass") — it's **dynamic exit criteria**. Low risk? One static check is enough. High risk (auth, DB, deploy)? A stronger proof becomes the exit bar. fable-ish forces that judgment on every task.
+The point isn't a *fixed checklist* ("tests pass") — it's **dynamic exit criteria**. Low risk? One static check is enough. High risk (auth, DB, deploy)? A stronger proof becomes the exit bar.
+
+> The loop as a whole is **guidance the skill provides**. What the hooks *mechanically enforce* is just the last part — **refusing a "done" with no verification evidence** (the Stop gate), plus re-engaging a turn that only promised work. The other steps (inspect context, name the work unit, hunt counter-examples, …) are advised, not enforced.
 
 ---
 
