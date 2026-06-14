@@ -27,9 +27,10 @@ The point isn't a *fixed checklist* ("tests pass") — it's **dynamic exit crite
 
 ## 💡 What it does
 
-LLMs often report "all done" without verifying. fable-ish adds **friction** to that habit using just three lifecycle hooks:
+LLMs often report "all done" without verifying. fable-ish adds **friction** to that habit using lifecycle hooks:
 
-- **🏷️ Task classification** — sorts each incoming request into `quick` / `normal` / `deep` / `blocked` and injects the matching verification expectation as context.
+- **🏷️ Task classification** — sorts each incoming request into `quick` / `normal` / `deep` / `blocked` and injects the matching verification expectation. Destructive / secret-exposing prompts are stopped at the *input* stage, not at the end.
+- **🛡️ Risky-action blocking** — denies dangerous operations before they run: `rm -rf`, `git push`, `npm publish`, DB migrations, and edits to secret files (`.env`/`.pem`/`id_rsa`). This is a heuristic first line — back it with `permissions.deny` for hard enforcement (see the [design note](#️-design-note--guardrails-and-hard-enforcement)).
 - **📒 Evidence tracking** — records which files changed, which verification commands ran, and whether anything failed, in a small JSON ledger. It even tracks whether a proof actually *covered the changed files* (`direct` / `generic` / `uncertain`).
 - **🚦 Completion gate** — if code changed but no successful verification was observed, it sends Claude back to verify at stop time (capped at two blocks to avoid loops).
 
@@ -70,7 +71,7 @@ Once installed and trusted via `/hooks`, it's **automatic** — there's nothing 
 
 If hooks are disabled or untrusted, the skill still works as reusable instructions, but the mechanical gate won't run.
 
-> **Note**: *hard* blocking of secret files and dangerous commands belongs in native `permissions.deny`, not this plugin (see the [design note](#️-design-note--why-theres-no-command-blocking-hook) below).
+> **Note**: the blocking hooks are heuristic (bypassable), so treat them as a *first line*. For unbypassable hard enforcement, also set native `permissions.deny` — example in [`examples/claude-permissions.example.json`](./examples/claude-permissions.example.json), explained in the [design note](#️-design-note--guardrails-and-hard-enforcement).
 
 ---
 
@@ -78,7 +79,8 @@ If hooks are disabled or untrusted, the skill still works as reusable instructio
 
 | Hook | Role |
 |------|------|
-| `UserPromptSubmit` | Classifies the request as `quick`/`normal`/`deep`/`blocked` and injects short context for the expected verification depth |
+| `UserPromptSubmit` | Classifies the request as `quick`/`normal`/`deep`/`blocked` and injects short context. `blocked` (secret/destructive requests) is stopped with `decision:block` |
+| `PreToolUse` / `PermissionRequest` | Deny risky Bash/PowerShell commands (`rm -rf`, `git push`, `npm publish`, DB migrations …) and secret-file edits (`.env`/`.pem`/`id_rsa`) before they run or are approved |
 | `PostToolUse` (+ `PostToolUseFailure`) | On **both success and failure** of Bash/PowerShell/edit tools, records changed files/paths, verification commands, a coverage relation (`direct`/`generic`/`uncertain`), and failures in a JSON ledger (under `CLAUDE_PLUGIN_DATA`, OS-temp fallback). A verification that arrives via the failure event is never logged as a pass |
 | `Stop` | Re-engages when work changed files without successful verification, or when the turn only *promised* work without doing it (capped at two blocks; yields immediately when `stop_hook_active` is set) |
 
@@ -86,29 +88,29 @@ The skill (`skills/fable-ish/SKILL.md`) is the human-readable workflow layer: mo
 
 ---
 
-## 🛡️ Design note — why there's no command-blocking hook
+## 🛡️ Design note — guardrails and hard enforcement
 
-fable-ish does **not** block risky shell commands or secret-file edits — by design.
+fable-ish ports the original's `PreToolUse` / `PermissionRequest` hooks that block risky commands and secret-file edits. **But this is a heuristic first line, not a security boundary.**
 
-Matching shell *intent* with regex is a losing game. A regex ruleset for this blocks only **4 of 16** dangerous commands — `rm -r -f` (split flags), `rm --recursive --force`, `$VAR -rf`, base64-piped `eval`, `git -C . push`, and genuinely destructive `dd` / `mkfs` / fork-bombs all slip through — while it *over-blocks* legitimate work like clearing a build cache or `npm publish` during a release. Variable expansion, quoting, globs, and encoding defeat any surface pattern, so hardening the regex only trades false negatives for more false positives.
+Judging shell *intent* with regex is inherently incomplete. Variable expansion, quoting, globs, and encoding can slip past the surface pattern (e.g. `rm -r -f` split flags, `$VAR -rf`, base64-piped `eval`), and it can also over-block legitimate work. So treat this layer as a *tripwire for accidental mistakes*.
 
-Claude Code already has a stronger native mechanism. Enforce hard limits with `permissions.deny` in your settings, where commands are parsed and a user approval step still applies:
+For **unbypassable hard enforcement**, also set Claude Code's native `permissions.deny`, where commands are parsed and a user approval step applies. A ready-to-use example is in [`examples/claude-permissions.example.json`](./examples/claude-permissions.example.json):
 
 ```json
 {
   "permissions": {
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
       "Write(./.env)",
       "Bash(rm -rf:*)",
-      "Bash(dd:*)",
-      "Bash(mkfs:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npm publish:*)"
     ]
   }
 }
 ```
+
+For real isolation, add sandboxing / permission modes (avoid `bypassPermissions`) / approvals / review. In short: fable-ish's blocking is the *first line*, `permissions.deny` is the *hard enforcement*, and the core is still making sure work is **verified before it's reported done**.
 
 For real isolation, rely on sandboxing, permission modes (avoid `bypassPermissions`), approvals, and review — not string matching. fable-ish focuses on the part a hook is actually good at: making sure work is *verified* before it's reported done.
 

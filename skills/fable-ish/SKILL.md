@@ -6,8 +6,9 @@ description: Apply fable-ish verification discipline to Claude Code coding tasks
 # fable-ish
 
 Use this skill as the workflow instruction layer for the fable-ish plugin.
-The plugin hooks provide a mechanical verification gate (task classification,
-evidence tracking, stop-time review); this skill provides the human-readable workflow.
+The plugin hooks provide mechanical guardrails and a verification gate (task
+classification, risky-action blocking, evidence tracking, stop-time review);
+this skill provides the human-readable workflow.
 Treat `fablish` as a common typo alias for `fable-ish`; do not rename the plugin, skill, or directory.
 
 ## Core Rule

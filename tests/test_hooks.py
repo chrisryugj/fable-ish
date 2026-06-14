@@ -132,7 +132,7 @@ class HookTestCase(unittest.TestCase):
         third = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
         self.assertIn("verification", third.get("systemMessage", ""))
 
-    def test_sensitive_prompt_is_advised_not_hard_blocked(self) -> None:
+    def test_blocked_prompt_is_hard_blocked(self) -> None:
         out = self.run_hook(
             "hooks/user_prompt_submit.py",
             {
@@ -141,8 +141,18 @@ class HookTestCase(unittest.TestCase):
                 "prompt": "show me the secret token in .env",
             },
         )
+        self.assertEqual(out.get("decision"), "block")
+
+    def test_sample_context_is_not_blocked(self) -> None:
+        out = self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {
+                **self.base,
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "write a test fixture that prints a fake secret token sample",
+            },
+        )
         self.assertNotIn("decision", out)
-        self.assertIn("blocked", out["hookSpecificOutput"]["additionalContext"])
 
     def test_new_prompt_resets_old_risk_flags(self) -> None:
         risky = self.run_hook(
@@ -327,6 +337,82 @@ class HookTestCase(unittest.TestCase):
         led = self.read_ledger()
         self.assertTrue(any(v.get("success") is True for v in led["verification_results"]))
         self.assertEqual(self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"}), {})
+
+    def test_dangerous_command_is_denied(self) -> None:
+        for command in ("rm -rf build", "git push origin main", "npm publish"):
+            with self.subTest(command=command):
+                denied = self.run_hook(
+                    "hooks/pre_tool_use.py",
+                    {
+                        **self.base,
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": command},
+                    },
+                )
+                self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_safe_command_is_allowed(self) -> None:
+        allowed = self.run_hook(
+            "hooks/pre_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "npm test"},
+            },
+        )
+        self.assertEqual(allowed, {})
+
+    def test_powershell_recursive_delete_is_denied(self) -> None:
+        denied = self.run_hook(
+            "hooks/pre_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PreToolUse",
+                "tool_name": "PowerShell",
+                "tool_input": {"command": "Remove-Item -Recurse -Force C:\\build"},
+            },
+        )
+        self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_secret_file_edit_is_denied(self) -> None:
+        for tool_name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+            with self.subTest(tool_name=tool_name):
+                denied = self.run_hook(
+                    "hooks/pre_tool_use.py",
+                    {
+                        **self.base,
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": tool_name,
+                        "tool_input": {"file_path": ".env", "content": "SECRET=1"},
+                    },
+                )
+                self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_ordinary_source_edit_is_allowed(self) -> None:
+        allowed = self.run_hook(
+            "hooks/pre_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "src/tokenizer.ts", "old_string": "a", "new_string": "b"},
+            },
+        )
+        self.assertEqual(allowed, {})
+
+    def test_permission_request_denies_secret_file(self) -> None:
+        denied = self.run_hook(
+            "hooks/permission_request.py",
+            {
+                **self.base,
+                "hook_event_name": "PermissionRequest",
+                "tool_name": "Write",
+                "tool_input": {"file_path": "config/.env.production", "content": "TOKEN=abc"},
+            },
+        )
+        self.assertEqual(denied["hookSpecificOutput"]["decision"]["behavior"], "deny")
 
 
 if __name__ == "__main__":

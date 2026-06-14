@@ -1,0 +1,22 @@
+{
+  "//": "fable-ish hard-enforcement example for Claude Code settings (settings.json / .claude/settings.json).",
+  "//2": "The plugin's PreToolUse/PermissionRequest hooks already deny these heuristically; this adds a parsed, user-approved layer that survives hook bypass. Merge into your own permissions block.",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Write(./.env)",
+      "Write(./.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/id_rsa)",
+      "Read(./**/credentials.json)",
+      "Bash(rm -rf:*)",
+      "Bash(dd:*)",
+      "Bash(mkfs:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git push:*)",
+      "Bash(npm publish:*)",
+      "Bash(terraform destroy:*)"
+    ]
+  }
+}

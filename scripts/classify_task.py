@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Heuristics for fable-ish task classification."""
+"""Heuristics for fable-ish task and tool-risk classification."""
 
 from __future__ import annotations
 
-from ledger import redact
 import re
+from typing import Any
+
+from ledger import redact
 
 
 QUICK_RE = re.compile(
@@ -32,6 +34,38 @@ DESTRUCTIVE_REQUEST_RE = re.compile(
 )
 SAMPLE_RE = re.compile(r"(?i)\b(sample|example|test case|fixture|dry[- ]run|검증|샘플|예시)\b")
 
+# Risky shell commands blocked before they run (Bash / PowerShell).
+COMMAND_RULES: list[tuple[str, re.Pattern[str], str]] = [
+    ("destructive-delete", re.compile(r"(?i)(^|[;&|]\s*)rm\s+-[A-Za-z]*r[A-Za-z]*f|rm\s+-[A-Za-z]*f[A-Za-z]*r"), "rm -rf is blocked."),
+    ("destructive-delete", re.compile(r"(?i)\bfind\b.+\b-delete\b"), "Bulk find -delete is blocked."),
+    ("destructive-delete", re.compile(r"(?i)\bxargs\b.+\brm\b"), "Bulk xargs rm is blocked."),
+    ("destructive-delete", re.compile(r"(?i)\b(Remove-Item|ri|rd|rmdir)\b.+(-Recurse|-Force)"), "Recursive PowerShell deletion is blocked."),
+    ("destructive-git", re.compile(r"(?i)\bgit\s+reset\s+--hard\b"), "git reset --hard is blocked."),
+    ("destructive-git", re.compile(r"(?i)\bgit\s+clean\s+-[A-Za-z]*f"), "git clean -f is blocked."),
+    ("remote-write", re.compile(r"(?i)\bgit\s+push\b"), "git push requires an explicit release workflow."),
+    ("production-deploy", re.compile(r"(?i)\b(vercel|netlify)\b.+\b(--prod|--production|prod)\b"), "Production deploy commands are blocked."),
+    ("production-deploy", re.compile(r"(?i)\bfirebase\s+deploy\b|\bkubectl\s+(apply|delete|rollout|scale)\b|\bhelm\s+(upgrade|install|delete)\b"), "Production or cluster deployment commands are blocked."),
+    ("infra-write", re.compile(r"(?i)\b(terraform\s+apply|terraform\s+destroy|pulumi\s+up|pulumi\s+destroy)\b"), "Infrastructure write commands are blocked."),
+    ("db-migration", re.compile(r"(?i)\b(prisma\s+migrate\s+deploy|alembic\s+upgrade|rails\s+db:migrate|sequelize\s+db:migrate|knex\s+migrate:latest|supabase\s+db\s+push|drizzle-kit\s+migrate)\b"), "Database migration commands are blocked."),
+    ("package-publish", re.compile(r"(?i)\b(npm\s+publish|pnpm\s+publish|yarn\s+npm\s+publish|twine\s+upload|gem\s+push)\b"), "Package publish commands are blocked."),
+    ("secret-output", re.compile(r"(?i)\b(cat|less|more|grep|rg|awk|sed|Get-Content|gc|type)\b.+(\.env|id_rsa|\.pem|secret|token|api[_-]?key|password)"), "Secret-bearing file or token output is blocked."),
+    ("secret-output", re.compile(r"(?i)\b(printenv|env|set|Get-ChildItem\s+Env:|gci\s+env:)\b(\s*$|\s*[;&|])"), "Bulk environment output is blocked."),
+    ("secret-output", re.compile(r"(?i)\becho\s+\$[A-Za-z0-9_]*(SECRET|TOKEN|KEY|PASSWORD)[A-Za-z0-9_]*|\$Env:[A-Za-z0-9_]*(SECRET|TOKEN|KEY|PASSWORD)"), "Secret environment variable output is blocked."),
+]
+
+# Secret-bearing file paths blocked from edits (Edit / Write / MultiEdit / NotebookEdit).
+SECRET_PATH_RE = re.compile(
+    r"(?i)("
+    r"(^|[/\\])\.env($|[./\\])"
+    r"|id_rsa|id_ed25519"
+    r"|\.(pem|pfx|p12|key)$"
+    r"|(^|[/\\])(\.npmrc|\.git-credentials|credentials|secrets?)($|[./\\])"
+    r")"
+)
+
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+COMMAND_TOOLS = {"Bash", "PowerShell"}
+
 
 def classify_prompt(prompt: str) -> tuple[str, list[str], str]:
     text = prompt or ""
@@ -49,9 +83,9 @@ def classify_prompt(prompt: str) -> tuple[str, list[str], str]:
         risks.append("destructive")
 
     sample_context = bool(SAMPLE_RE.search(text))
-    sensitive = (SECRET_REQUEST_RE.search(text) or DESTRUCTIVE_REQUEST_RE.search(text)) and not sample_context
-    if sensitive:
-        return "blocked", risks or ["sensitive-request"], redact(text, 180)
+    blocked = (SECRET_REQUEST_RE.search(text) or DESTRUCTIVE_REQUEST_RE.search(text)) and not sample_context
+    if blocked:
+        return "blocked", risks or ["blocked-risk"], redact(text, 180)
     if DEEP_RE.search(text) or any(flag in risks for flag in ("production", "database", "remote-write")):
         return "deep", risks, redact(text, 180)
     if QUICK_RE.search(text) and not risks:
@@ -59,6 +93,60 @@ def classify_prompt(prompt: str) -> tuple[str, list[str], str]:
     if NORMAL_RE.search(text):
         return "normal", risks, redact(text, 180)
     return "quick", risks, redact(text, 180)
+
+
+def classify_command(command: str) -> tuple[bool, list[str], str]:
+    text = command or ""
+    flags: list[str] = []
+    reasons: list[str] = []
+    for flag, pattern, reason in COMMAND_RULES:
+        if pattern.search(text):
+            flags.append(flag)
+            reasons.append(reason)
+    if flags:
+        return True, sorted(set(flags)), " ".join(reasons)
+    return False, [], ""
+
+
+def edit_target_path(input_data: dict[str, Any]) -> str:
+    tool_input = input_data.get("tool_input")
+    if isinstance(tool_input, dict):
+        return str(
+            tool_input.get("file_path")
+            or tool_input.get("notebook_path")
+            or tool_input.get("path")
+            or ""
+        )
+    return ""
+
+
+def classify_file_edit(input_data: dict[str, Any]) -> tuple[bool, list[str], str]:
+    path = edit_target_path(input_data)
+    if path and SECRET_PATH_RE.search(path):
+        return True, ["secret-file-edit"], "Edits to secret-bearing files are blocked."
+    return False, [], ""
+
+
+def tool_command(input_data: dict[str, Any]) -> str:
+    tool_input = input_data.get("tool_input")
+    if isinstance(tool_input, dict):
+        command = tool_input.get("command")
+        if command is not None:
+            return str(command)
+        if "description" in tool_input:
+            return str(tool_input.get("description") or "")
+    if isinstance(tool_input, str):
+        return tool_input
+    return ""
+
+
+def classify_tool_risk(input_data: dict[str, Any]) -> tuple[bool, list[str], str]:
+    tool_name = str(input_data.get("tool_name") or "")
+    if tool_name in EDIT_TOOLS:
+        return classify_file_edit(input_data)
+    if tool_name in COMMAND_TOOLS:
+        return classify_command(tool_command(input_data))
+    return False, [], ""
 
 
 def context_for_mode(mode: str, risk_flags: list[str]) -> str:
@@ -72,10 +160,6 @@ def context_for_mode(mode: str, risk_flags: list[str]) -> str:
     elif mode == "deep":
         lines.append("Define the exit proof before completion and verify changed behavior before final.")
     elif mode == "blocked":
-        lines.append(
-            "This request touches a sensitive or destructive boundary. Confirm scope, prefer the safest "
-            "reversible action, and stop for user confirmation when the next step needs credentials, "
-            "irreversible remote writes, or destructive deletes. Rely on Claude Code permissions for hard enforcement."
-        )
+        lines.append("Do not proceed until the risky request is narrowed or explicitly confirmed.")
     lines.append("Never claim verification that was not actually observed.")
     return "\n".join(lines[:10])

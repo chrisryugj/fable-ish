@@ -56,6 +56,15 @@ def main() -> int:
 
     update_ledger(input_data, apply)
 
+    if mode == "blocked":
+        emit_json(
+            {
+                "decision": "block",
+                "reason": "fable-ish blocked this prompt because it appears to request destructive or secret-exposing action. Narrow the request or provide explicit safe scope.",
+            }
+        )
+        return 0
+
     emit_json(
         {
             "hookSpecificOutput": {
