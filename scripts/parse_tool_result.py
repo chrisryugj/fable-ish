@@ -19,12 +19,18 @@ VERIFY_RE = re.compile(
 )
 FAILURE_RE = re.compile(
     r"(?i)(command not found|no such file or directory|traceback|syntaxerror|failed|failure|"
-    r"\berror:|\b[1-9][0-9]*\s+errors?\b|exit code [1-9]|exited with code [1-9]|"
+    r"\berror:|\b[1-9][0-9]*\s+errors?\b|exit code\s*:?\s*[1-9]|exited with code\s*:?\s*[1-9]|"
     r"tests? failed|build failed|lint failed)"
 )
-SUCCESS_RE = re.compile(r"(?i)\b(passed|success|succeeded|0 failed|build completed|done|valid)\b")
+EXIT_ZERO_RE = re.compile(r"(?i)\b(exit code|exited with code|process exited with code)\s*:?\s*0\b")
+SUCCESS_RE = re.compile(
+    r"(?i)\b(passed|success(?:fully)?|succeeded|0 failed|build completed|"
+    r"compiled successfully|built successfully|build succeeded|done|valid)\b"
+)
 DIRECT_TEST_RE = re.compile(r"(?i)(pytest|unittest|vitest|jest|playwright|cypress|rspec|go\s+test|cargo\s+test)")
 MUTATING_BASH_RE = re.compile(r"(?i)\b(python\s+.*\s+-m\s+compileall|chmod|mkdir|mv|cp|rm|touch|npm\s+run\s+build|pnpm\s+build|yarn\s+build)\b")
+SUCCESS_STATUSES = {"success", "succeeded", "completed", "complete", "ok", "passed", "pass"}
+FAILURE_STATUSES = {"failed", "failure", "error", "errored", "fatal", "timeout", "timed_out"}
 
 
 def response_text(value: Any, limit: int = 4000) -> str:
@@ -72,6 +78,14 @@ def exit_success(input_data: dict[str, Any], text: str) -> bool | None:
                     return value == 0
                 if isinstance(value, str) and value.isdigit():
                     return int(value) == 0
+                if isinstance(value, str):
+                    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+                    if normalized in SUCCESS_STATUSES:
+                        return True
+                    if normalized in FAILURE_STATUSES:
+                        return False
+    if EXIT_ZERO_RE.search(text):
+        return True
     if FAILURE_RE.search(text):
         return False
     if SUCCESS_RE.search(text):

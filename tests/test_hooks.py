@@ -339,7 +339,7 @@ class HookTestCase(unittest.TestCase):
         self.assertEqual(self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"}), {})
 
     def test_dangerous_command_is_denied(self) -> None:
-        for command in ("rm -rf build", "git push origin main", "npm publish"):
+        for command in ("rm -rf build", "git push origin main"):
             with self.subTest(command=command):
                 denied = self.run_hook(
                     "hooks/pre_tool_use.py",
@@ -363,6 +363,47 @@ class HookTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(allowed, {})
+
+    def test_deploy_migration_and_publish_are_allowed(self) -> None:
+        for command in (
+            "vercel --prod",
+            "netlify deploy --production",
+            "firebase deploy",
+            "kubectl apply -f deploy.yaml",
+            "helm upgrade app chart",
+            "supabase db push",
+            "prisma migrate deploy",
+            "rails db:migrate",
+            "terraform apply -auto-approve",
+            "pulumi up --yes",
+            "npm publish",
+            "twine upload dist/*",
+        ):
+            with self.subTest(command=command):
+                allowed = self.run_hook(
+                    "hooks/pre_tool_use.py",
+                    {
+                        **self.base,
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": command},
+                    },
+                )
+                self.assertEqual(allowed, {})
+
+    def test_infrastructure_destroy_remains_denied(self) -> None:
+        for command in ("terraform destroy", "pulumi destroy"):
+            with self.subTest(command=command):
+                denied = self.run_hook(
+                    "hooks/pre_tool_use.py",
+                    {
+                        **self.base,
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": command},
+                    },
+                )
+                self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
 
     def test_powershell_recursive_delete_is_denied(self) -> None:
         denied = self.run_hook(

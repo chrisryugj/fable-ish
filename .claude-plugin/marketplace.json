@@ -8,7 +8,7 @@
       "name": "fable-ish",
       "source": "./",
       "description": "Verification-gated workflow for Claude Code — Fable-style discipline. Port of the Codex plugin by 플라잉따릉이 (Agent Korea).",
-      "version": "0.1.2"
+      "version": "0.1.3"
     }
   ]
 }

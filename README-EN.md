@@ -30,7 +30,7 @@ The point isn't a *fixed checklist* ("tests pass") — it's **dynamic exit crite
 LLMs often report "all done" without verifying. fable-ish adds **friction** to that habit using lifecycle hooks:
 
 - **🏷️ Task classification** — sorts each incoming request into `quick` / `normal` / `deep` / `blocked` and injects the matching verification expectation. Destructive / secret-exposing prompts are stopped at the *input* stage, not at the end.
-- **🛡️ Risky-action blocking** — denies dangerous operations before they run: `rm -rf`, `git push`, `npm publish`, DB migrations, and edits to secret files (`.env`/`.pem`/`id_rsa`). This is a heuristic first line — back it with `permissions.deny` for hard enforcement (see the [design note](#️-design-note--guardrails-and-hard-enforcement)).
+- **🛡️ Risky-action blocking** — denies a small set of destructive local operations before they run: `rm -rf`, recursive `Remove-Item`, `git push`, `terraform`/`pulumi destroy`, secret-output commands, and edits to secret files (`.env`/`.pem`/`id_rsa`). Deployment, migration, and publish commands are intentionally **not** blocked — fable-ish is a verification gate, not a deploy gate. This is a heuristic first line — back it with `permissions.deny` for hard enforcement (see the [design note](#️-design-note--guardrails-and-hard-enforcement)).
 - **📒 Evidence tracking** — records which files changed, which verification commands ran, and whether anything failed, in a small JSON ledger. It even tracks whether a proof actually *covered the changed files* (`direct` / `generic` / `uncertain`).
 - **🚦 Completion gate** — if code changed but no successful verification was observed, it sends Claude back to verify at stop time (capped at two blocks to avoid loops).
 
@@ -80,7 +80,7 @@ If hooks are disabled or untrusted, the skill still works as reusable instructio
 | Hook | Role |
 |------|------|
 | `UserPromptSubmit` | Classifies the request as `quick`/`normal`/`deep`/`blocked` and injects short context. `blocked` (secret/destructive requests) is stopped with `decision:block` |
-| `PreToolUse` / `PermissionRequest` | Deny risky Bash/PowerShell commands (`rm -rf`, `git push`, `npm publish`, DB migrations …) and secret-file edits (`.env`/`.pem`/`id_rsa`) before they run or are approved |
+| `PreToolUse` / `PermissionRequest` | Deny a small set of destructive Bash/PowerShell commands (`rm -rf`, recursive `Remove-Item`, `git push`, `terraform`/`pulumi destroy`, secret output …) and secret-file edits (`.env`/`.pem`/`id_rsa`) before they run or are approved. Deploy/migration/publish commands are not blocked |
 | `PostToolUse` (+ `PostToolUseFailure`) | On **both success and failure** of Bash/PowerShell/edit tools, records changed files/paths, verification commands, a coverage relation (`direct`/`generic`/`uncertain`), and failures in a JSON ledger (under `CLAUDE_PLUGIN_DATA`, OS-temp fallback). A verification that arrives via the failure event is never logged as a pass |
 | `Stop` | Re-engages when work changed files without successful verification, or when the turn only *promised* work without doing it (capped at two blocks; yields immediately when `stop_hook_active` is set) |
 

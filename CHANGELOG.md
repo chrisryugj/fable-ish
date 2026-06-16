@@ -3,6 +3,27 @@
 > Original `fable-ish` Codex plugin by 플라잉따릉이 (Agent Korea).
 > This changelog tracks the Claude Code port by chrisryugj.
 
+## 0.1.3 - 2026-06-16
+
+Ported improvements from the upstream Codex `fable-ish` 0.1.4 release and its
+"allow deployment commands" change.
+
+- **Deployment commands no longer blocked** (`classify_task.py`) — removed the
+  `PreToolUse` blocks for production deploy (Vercel/Netlify/Firebase/kubectl/Helm),
+  database migrations, package publish, and `terraform apply`/`pulumi up`.
+  fable-ish is a verification gate, not a deploy gate; only `terraform`/`pulumi
+  destroy` remain blocked under `infra-destroy`. (`rm -rf`, recursive
+  `Remove-Item`, `git push`, secret output, and secret-file edits stay blocked.)
+- **Stronger verification-evidence recognition** (`parse_tool_result.py`) — now
+  reads `exit code: 0` as success, normalizes status strings (`success`/`failed`/
+  `timeout`/…), and recognizes build-success output such as `Compiled successfully`
+  and `built successfully`. Failure detection also handles the colon form
+  (`exit code: 1`).
+- **Fail-open Stop hook** (`stop_gate.py`) — captures stray stdout so it can't
+  corrupt the hook's JSON contract, and on error emits a message that explicitly
+  flags it as a plugin issue ("not evidence that your verification failed") rather
+  than an ambiguous failure.
+
 ## 0.1.2 - 2026-06-14
 
 Full Claude Code port of the `fable-ish` plugin — feature-equivalent to the Codex
