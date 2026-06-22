@@ -2,7 +2,7 @@
 
 ## Verification Ladder
 
-Pick the lowest proof that actually covers the risk:
+Pick the lowest proof that actually covers the risk. Choose proof from both the domain risk and the work kind, not from code-test defaults alone.
 
 1. Static file/schema/manifest validation.
 2. Focused unit or integration test.
@@ -10,6 +10,8 @@ Pick the lowest proof that actually covers the risk:
 4. Runtime smoke check, curl, browser, or health endpoint.
 5. Artifact rendering or consumer check.
 6. CI, deployment, or production/internal URL check when that is the real boundary.
+
+For documentation, data analysis, or operational work, use the closest observable proof: fact/link/command checks, reproducible calculation, data provenance check, process state, endpoint response, job state, deployment state, or explicit user confirmation.
 
 ## Baseline Failures
 

@@ -20,6 +20,8 @@ Match verification depth to task risk.
 - Deep tasks: define the work unit and observable exit proof before final response.
 - Blocked tasks: stop when the next action needs user confirmation, credentials, external state, or unsafe destructive scope.
 
+Preserve domain meaning. Treat user-provided rules, edge cases, constraints, and correction criteria as primary inputs for implementation and verification.
+
 Do not claim verification that was not observed.
 
 ## References
@@ -34,6 +36,7 @@ Read only the reference needed for the current task:
 
 - Keep small requests small.
 - Prefer existing repo commands, tests, validators, and docs.
+- Use the task's work kind to choose proof, not only code-test defaults.
 - If no verifier exists, create a small one only when it is low-risk and clearly useful.
 - Use subagents only when they increase recall for broad or risky work; they are optional, not mandatory.
 - Stop at a verified boundary or name the concrete remaining blocker.

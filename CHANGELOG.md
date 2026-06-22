@@ -3,6 +3,28 @@
 > Original `fable-ish` Codex plugin by 플라잉따릉이 (Agent Korea).
 > This changelog tracks the Claude Code port by chrisryugj.
 
+## 0.1.4 - 2026-06-22
+
+Ported the guidance additions from the upstream Codex `fable-ish` 1.0.5 release.
+Skill text only — no hook behavior change. (The 1.0.5 `permission_request.py`
+no-op and `ship`/`yeet`/`gstack` command exclusions are upstream's move *away*
+from guardrails; this port keeps its restored guardrail layer, so they are not
+applicable here.)
+
+- **Domain steering** (`SKILL.md`, `references/workflow.md`) — treat
+  user-provided rules, edge cases, constraints, and correction criteria as the
+  primary steering signal for the work unit, failure scenarios, and exit proof,
+  rather than substituting generic coding assumptions.
+- **Work-kind selection** (`SKILL.md`, `references/workflow.md`) — after picking
+  depth (quick/normal/deep/blocked), also classify work kind
+  (build/fix/test/operate/understand/plan/analyze/document) and let the work kind
+  choose the proof. Depth picks rigor; work kind picks proof.
+- **Broader verification ladder** (`references/verification.md`) — choose proof
+  from both domain risk and work kind, and for documentation, data-analysis, or
+  operational work use the closest observable proof (fact/link/command checks,
+  reproducible calculation, data provenance, process/endpoint/job/deployment
+  state, or explicit user confirmation) instead of code-test defaults.
+
 ## 0.1.3 - 2026-06-16
 
 Ported improvements from the upstream Codex `fable-ish` 0.1.4 release and its

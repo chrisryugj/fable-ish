@@ -7,6 +7,27 @@
 - `deep`: production, auth, database, migrations, deployment, broad refactor, generated artifacts, or high reliability work.
 - `blocked`: destructive scope, secret exposure, irreversible remote action, missing credentials, or user decision required.
 
+## Domain Steering
+
+Use the user's domain expertise as the main steering signal. Preserve domain meaning instead of replacing it with generic coding assumptions.
+
+When the user gives rules, edge cases, constraints, or correction criteria, use them to choose the work unit, likely failure scenarios, and exit proof.
+
+## Work Kind Selection
+
+First classify depth: quick, normal, deep, or blocked. Then classify work kind:
+
+- `build`: create or extend behavior.
+- `fix`: reproduce, diagnose, patch, and prove the failure no longer reproduces.
+- `test`: choose the smallest proof that covers the risk.
+- `operate`: verify process, endpoint, job, deployment, or runtime state.
+- `understand`: inspect and explain the existing system without inventing behavior.
+- `plan`: produce risk-ordered phases and proof boundaries.
+- `analyze`: preserve data provenance, calculations, and reproducibility.
+- `document`: verify facts, commands, links, and user-facing procedure.
+
+Use depth to choose rigor. Use work kind to choose proof.
+
 ## Work Loop
 
 For normal and deep tasks:

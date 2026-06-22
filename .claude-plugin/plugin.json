@@ -1,6 +1,6 @@
 {
   "name": "fable-ish",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Verification-gated workflow plugin for Claude Code tasks. Adds lightweight hooks for task classification, verification tracking, and stop-time completion review.",
   "author": {
     "name": "플라잉따릉이 (Agent Korea)"
