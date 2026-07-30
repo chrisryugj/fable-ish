@@ -1,0 +1,30 @@
+fable-ish (Claude Code port)
+Copyright 2026 chrisryugj
+
+이 저장소는 아래 저작물의 파생물이다.
+
+---
+
+fable-ish Codex
+Copyright 2026 Pandoll-AI
+https://github.com/Pandoll-AI/fable-ish-codex
+
+  This project may be used, modified, and redistributed under the Apache License,
+  Version 2.0. If you redistribute a modified version or derivative work, please
+  keep attribution to fable-ish Codex and Pandoll-AI.
+
+원본은 플라잉따릉이(Agent Korea)가 Codex 플러그인으로 만들었으며 Apache License 2.0
+으로 배포된다. 라이선스 전문은 LICENSE-APACHE-2.0 에 동봉했다.
+
+변경 사항 (Apache-2.0 §4(b)):
+- Codex 플러그인 구조를 Claude Code 의 훅·스킬·매니페스트 구조로 이식
+- 플러그인 이름·스킬 구성·워크플로는 원본을 보존
+- 이식 과정에서 추가·수정된 파일은 chrisryugj 가 작성
+
+---
+
+라이선스 구조
+
+원본 fable-ish Codex 에서 유래한 부분에는 Apache License 2.0 이 계속 적용되며,
+그 조건(라이선스 사본 제공, 변경 고지, 저작권·귀속 고지 유지)을 따라야 한다.
+이식 과정에서 새로 작성된 부분은 LICENSE(MIT)를 따른다.

@@ -3,7 +3,7 @@
 > **"fable-ish" = "Fable처럼(-ish)".**
 > 관찰 가능한 검증으로 통과하기 전에는, 완료를 인정하지 않는다.
 
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![license](https://img.shields.io/badge/license-Apache--2.0%20%2B%20MIT-blue.svg)](./NOTICE)
 [![platform](https://img.shields.io/badge/platform-Claude%20Code-7c3aed.svg)](https://claude.com/claude-code)
 
 `fable-ish`는 Anthropic이 최근 선보인 코딩 모델 **Fable**이 보여준 *검증 규율*을 **Claude Code** 훅으로 재현한 플러그인입니다. Fable의 강함은 "똑똑한 모델이 코드를 잘 쓴다"가 아니라 **루프**에 있습니다 — 작업의 위험에 맞춰 탈출 조건을 매 순간 새로 세우고, 그 조건이 *관찰 가능한 검증*으로 통과되기 전에는 완료를 인정하지 않습니다. fable-ish는 그 규율을 가벼운 훅 3개로 흉내 냅니다(그래서 `-ish`).
@@ -169,4 +169,13 @@ python3 tests/test_hooks.py
 
 ## 📄 라이선스
 
-[MIT](./LICENSE) — © 플라잉따릉이 (Agent Korea) and contributors.
+원본 [fable-ish Codex](https://github.com/Pandoll-AI/fable-ish-codex)는
+**Apache License 2.0** (© 2026 Pandoll-AI / 플라잉따릉이, Agent Korea)으로 배포됩니다.
+이 저장소는 그 파생물이므로, 원본에서 유래한 부분에는 Apache-2.0이 계속 적용됩니다.
+
+- 원본 라이선스 전문: [LICENSE-APACHE-2.0](./LICENSE-APACHE-2.0)
+- 원본 고지 및 변경 사항: [NOTICE](./NOTICE)
+- 이식 과정에서 새로 작성된 부분: [MIT](./LICENSE)
+
+재배포할 때는 Apache-2.0 §4가 요구하는 라이선스 사본·변경 고지·귀속 표시를 함께
+유지해야 합니다.
