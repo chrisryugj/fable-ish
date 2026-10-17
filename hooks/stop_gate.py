@@ -28,13 +28,8 @@ def failure_payload(exc: Exception) -> dict[str, object]:
 def main() -> dict[str, object]:
     input_data = read_stdin_json()
     if input_data.get("stop_hook_active") is True:
-        return {
-            "systemMessage": "fable-ish stop hook is already active; allowing stop to avoid a continuation loop.",
-            "hookSpecificOutput": {
-                "hookEventName": "Stop",
-                "additionalContext": "fable-ish: stop hook was already active, so no additional block was issued.",
-            },
-        }
+        # Emit nothing: any additionalContext here would re-open the turn and loop forever.
+        return {}
 
     if stated_but_unstarted(str(input_data.get("transcript_path") or "")):
         return {

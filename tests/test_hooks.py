@@ -132,6 +132,27 @@ class HookTestCase(unittest.TestCase):
         third = self.run_hook("hooks/stop_gate.py", {**self.base, "hook_event_name": "Stop"})
         self.assertIn("verification", third.get("systemMessage", ""))
 
+    def test_stop_hook_active_lets_the_turn_end(self) -> None:
+        # Stop-hook additionalContext continues the conversation, so the stop_hook_active
+        # guard must emit nothing or the turn never ends (#1).
+        self.run_hook(
+            "hooks/user_prompt_submit.py",
+            {**self.base, "hook_event_name": "UserPromptSubmit", "prompt": "Implement a small code fix"},
+        )
+        self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "app.py", "old_string": "x", "new_string": "y"},
+                "tool_response": {"success": True},
+            },
+        )
+        stop = {**self.base, "hook_event_name": "Stop"}
+        self.assertEqual(self.run_hook("hooks/stop_gate.py", stop).get("decision"), "block")
+        self.assertEqual(self.run_hook("hooks/stop_gate.py", {**stop, "stop_hook_active": True}), {})
+
     def test_blocked_prompt_is_hard_blocked(self) -> None:
         out = self.run_hook(
             "hooks/user_prompt_submit.py",
@@ -187,6 +208,65 @@ class HookTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(out, {})
+
+    def test_failure_words_in_ordinary_output_are_not_failures(self) -> None:
+        # Reading, searching, or editing text that merely contains failure words is not a failure (#2).
+        source = (ROOT / "scripts" / "parse_tool_result.py").read_text(encoding="utf-8")
+        cases = (
+            ("Bash", {"command": "cat scripts/parse_tool_result.py"}, {"stdout": source, "stderr": ""}),
+            ("Bash", {"command": "grep -rn Traceback docs"}, {"stdout": "docs/debug.md:3:Traceback (most recent call last):"}),
+            ("Bash", {"command": "tail -n 1 run.log"}, {"stdout": "12:00 | mode quick | failures 2", "stderr": ""}),
+            ("Bash", {"command": "grep -rn 'timed out' docs"}, {"stdout": "docs/faq.md:2:If the command timed out, raise the limit."}),
+            ("Edit", {"file_path": "notes.md", "old_string": "a", "new_string": "b"}, {"filePath": "notes.md", "originalFile": "error: login failed"}),
+        )
+        for tool_name, tool_input, tool_response in cases:
+            with self.subTest(tool_input=tool_input):
+                out = self.run_hook(
+                    "hooks/post_tool_use.py",
+                    {
+                        **self.base,
+                        "hook_event_name": "PostToolUse",
+                        "tool_name": tool_name,
+                        "tool_input": tool_input,
+                        "tool_response": tool_response,
+                    },
+                )
+                self.assertEqual(out, {})
+        self.assertEqual(self.read_ledger()["failures"], [])
+
+    def test_hard_failure_signals_still_fail_any_command(self) -> None:
+        for command, tool_response in (
+            ("make install", {"stdout": "", "stderr": "", "exit_code": 2}),
+            ("node app.js", {"stdout": "", "stderr": "Exit code 1\nError: Cannot find module 'express'"}),
+            ("sleep 600", {"stdout": "", "stderr": "Command timed out after 2m 0s"}),
+        ):
+            with self.subTest(command=command):
+                out = self.run_hook(
+                    "hooks/post_tool_use.py",
+                    {
+                        **self.base,
+                        "hook_event_name": "PostToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": command},
+                        "tool_response": tool_response,
+                    },
+                )
+                self.assertIn("tool failure", out.get("hookSpecificOutput", {}).get("additionalContext", ""))
+        self.assertEqual(len(self.read_ledger()["failures"]), 3)
+
+    def test_failure_words_still_fail_a_verification_command(self) -> None:
+        out = self.run_hook(
+            "hooks/post_tool_use.py",
+            {
+                **self.base,
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "python -m pytest tests"},
+                "tool_response": {"stdout": "1 failed, 4 passed in 0.31s", "stderr": ""},
+            },
+        )
+        self.assertIn("tool failure", out["hookSpecificOutput"]["additionalContext"])
+        self.assertIs(self.read_ledger()["verification_results"][-1]["success"], False)
 
     def test_invalid_text_is_not_treated_as_success(self) -> None:
         self.run_hook(

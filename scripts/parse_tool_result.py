@@ -19,9 +19,12 @@ VERIFY_RE = re.compile(
 )
 FAILURE_RE = re.compile(
     r"(?i)(command not found|no such file or directory|traceback|syntaxerror|failed|failure|"
-    r"\berror:|\b[1-9][0-9]*\s+errors?\b|exit code\s*:?\s*[1-9]|exited with code\s*:?\s*[1-9]|"
+    r"\berror:|\b[1-9][0-9]*\s+errors?\b|"
     r"tests? failed|build failed|lint failed)"
 )
+# Signals about the run itself (a non-zero exit code, a timeout). FAILURE_RE's words only
+# mean something in a verifier's output; in cat/grep/ls output they are just file text.
+HARD_FAILURE_RE = re.compile(r"(?i)exit code\s*:?\s*[1-9]|exited with code\s*:?\s*[1-9]|\bcommand\s+timed\s+out\s+after\b")
 EXIT_ZERO_RE = re.compile(r"(?i)\b(exit code|exited with code|process exited with code)\s*:?\s*0\b")
 SUCCESS_RE = re.compile(
     r"(?i)\b(passed|success(?:fully)?|succeeded|0 failed|build completed|"
@@ -65,7 +68,7 @@ def command_from_input(input_data: dict[str, Any]) -> str:
     return ""
 
 
-def exit_success(input_data: dict[str, Any], text: str) -> bool | None:
+def exit_success(input_data: dict[str, Any], text: str, word_scan: bool = True) -> bool | None:
     candidates = [input_data, input_data.get("tool_response")]
     for candidate in candidates:
         if isinstance(candidate, dict):
@@ -86,6 +89,10 @@ def exit_success(input_data: dict[str, Any], text: str) -> bool | None:
                         return False
     if EXIT_ZERO_RE.search(text):
         return True
+    if HARD_FAILURE_RE.search(text):
+        return False
+    if not word_scan:
+        return None
     if FAILURE_RE.search(text):
         return False
     if SUCCESS_RE.search(text):
@@ -99,8 +106,8 @@ def is_verification_command(command: str) -> bool:
 
 def detect_failure(input_data: dict[str, Any]) -> dict[str, Any] | None:
     text = response_text(input_data.get("tool_response", input_data))
-    success = exit_success(input_data, text)
-    if success is False or (success is None and FAILURE_RE.search(text)):
+    word_scan = is_verification_command(command_from_input(input_data))
+    if exit_success(input_data, text, word_scan) is False:
         return {
             "kind": "tool-result",
             "summary": redact(text or command_from_input(input_data), 240),

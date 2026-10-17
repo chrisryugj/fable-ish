@@ -3,6 +3,23 @@
 > Original `fable-ish` Codex plugin by 플라잉따릉이 (Agent Korea).
 > This changelog tracks the Claude Code port by chrisryugj.
 
+## 0.1.5 - 2026-10-18
+
+Two hook bugs, both reported by [@mlight00](https://github.com/mlight00).
+
+- **Stop hook no longer loops** (`stop_gate.py`) — when `stop_hook_active` is set,
+  the gate now emits nothing. It used to return `hookSpecificOutput.additionalContext`,
+  and context from a Stop hook continues the conversation, so the guard meant to
+  end the loop kept it running ([#1](https://github.com/chrisryugj/fable-ish/issues/1)).
+- **No phantom tool failures** (`parse_tool_result.py`) — failure words (`failed`,
+  `error:`, `traceback`, …) now count only when `is_verification_command()` matches
+  the command line, so `cat`/`grep`/`ls` output or an edit that merely contains
+  them is no longer recorded as a failure. Other tool calls fail only on a hard
+  signal: a structured failure field, a non-zero exit code, or the harness's
+  `Command timed out …` notice (which now also marks a verification as failed).
+  A `PostToolUseFailure` event is still always recorded
+  ([#2](https://github.com/chrisryugj/fable-ish/issues/2)).
+
 ## 0.1.4 - 2026-06-22
 
 Ported the guidance additions from the upstream Codex `fable-ish` 1.0.5 release.
